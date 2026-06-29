@@ -270,7 +270,7 @@ const CAT={
 };
 
 const CFG_KEY = 'sb_config_v1';
-let SB_URL = '', SB_KEY = '';
+let SB_URL = 'https://nnxqcvjbssiiwduzfqwv.supabase.co', SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ueHFjdmpic3NpaXdkdXpmcXd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2OTM0NTQsImV4cCI6MjA5ODI2OTQ1NH0.Iw_bY4yWSEXxCKDQCTmwvHwTd0nG_tg7pGg-V06mnzw';
 let acts = [], openId = null, editId = null, delId = null;
 
 // ── TOAST ──────────────────────────────────────────
@@ -558,18 +558,8 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeC
 
 // ── INIT ───────────────────────────────────────────
 (function init(){
-  try {
-    const saved = JSON.parse(localStorage.getItem(CFG_KEY));
-    if(saved && saved.url && saved.key){
-      SB_URL=saved.url; SB_KEY=saved.key;
-      document.getElementById('sb-url').value=saved.url;
-      document.getElementById('sb-key').value=saved.key;
-      document.getElementById('setup-screen').style.display='none';
-      seedIfEmpty().then(fetchAll);
-      return;
-    }
-  } catch(e){}
-  // show setup
+  document.getElementById('setup-screen').style.display='none';
+  seedIfEmpty().then(fetchAll);
 })();
 </script>
 </body>
