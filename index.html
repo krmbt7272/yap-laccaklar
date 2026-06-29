@@ -144,10 +144,36 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;m
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:#1a8a70;color:#fff;padding:12px 22px;border-radius:50px;font-size:13px;font-weight:600;z-index:600;transition:transform 0.3s ease;white-space:nowrap;box-shadow:0 8px 24px rgba(26,138,112,0.35)}
 .toast.show{transform:translateX(-50%) translateY(0)}
 .toast.err{background:#e53935}
+/* BG BUTTON */
+.bg-btn{position:fixed;top:16px;right:16px;z-index:50;background:rgba(255,255,255,0.18);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.35);color:#fff;border-radius:50px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:7px;transition:all 0.18s;box-shadow:0 2px 12px rgba(0,0,0,0.2)}
+.bg-btn:hover{background:rgba(255,255,255,0.3);transform:translateY(-1px)}
+.bg-btn i{font-size:15px}
+/* BG MODAL */
+.bg-modal-card{background:#fff;border-radius:22px;width:100%;max-width:420px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,0.4)}
+.bg-modal-head{padding:22px 24px 0;display:flex;align-items:center;justify-content:space-between}
+.bg-modal-head h3{font-size:17px;font-weight:700;color:#111;display:flex;align-items:center;gap:8px}
+.bg-modal-head h3 i{color:#1a8a70}
+.bg-modal-body{padding:20px 24px 24px}
+.bg-drop{border:2px dashed #d0e8e2;background:linear-gradient(135deg,#f7fbfa,#eef6f3);border-radius:14px;padding:36px 20px;text-align:center;cursor:pointer;transition:all 0.18s;position:relative;overflow:hidden}
+.bg-drop:hover{border-color:#1a8a70;background:linear-gradient(135deg,#eaf5f0,#d6ede7)}
+.bg-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.bg-drop-icon{font-size:36px;color:#a8cec6;margin-bottom:10px}
+.bg-drop p{font-size:13px;color:#888;line-height:1.5}
+.bg-drop p strong{color:#1a8a70}
+.bg-preview{margin-top:14px;border-radius:12px;overflow:hidden;display:none}
+.bg-preview img{width:100%;height:140px;object-fit:cover;display:block}
+.bg-preview-label{font-size:11px;color:#999;text-align:center;margin-top:6px}
+.bg-modal-actions{display:flex;gap:10px;margin-top:16px}
+.bg-modal-actions button{flex:1;padding:13px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all 0.15s}
+.btn-bg-cancel{background:#f2f2f2;color:#666}
+.btn-bg-apply{background:#1a8a70;color:#fff}
+.btn-bg-apply:hover{background:#157a62}
+.btn-bg-apply:disabled{background:#9bc8be;cursor:not-allowed}
 </style>
 </head>
 <body>
-<div class="bg"></div>
+<div class="bg" id="bg-el"></div>
+<button class="bg-btn" onclick="openBgModal()"><i class="ti ti-photo-edit"></i> Arka planı değiştir</button>
 
 <!-- SETUP SCREEN -->
 <div class="setup-screen" id="setup-screen">
@@ -256,6 +282,31 @@ create policy "public access"
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- BG CHANGE MODAL -->
+<div class="backdrop" id="bg-backdrop">
+  <div class="bg-modal-card">
+    <div class="bg-modal-head">
+      <h3><i class="ti ti-photo-edit"></i> Arka planı değiştir</h3>
+      <button class="modal-close" onclick="closeBgModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="bg-modal-body">
+      <div class="bg-drop" id="bg-drop">
+        <input type="file" accept="image/*" id="bg-file-input" onchange="onBgFileSelect(this)">
+        <div class="bg-drop-icon"><i class="ti ti-photo-plus"></i></div>
+        <p>Fotoğraf seç veya buraya sürükle<br><strong>JPG, PNG, WEBP</strong> desteklenir</p>
+      </div>
+      <div class="bg-preview" id="bg-preview">
+        <img id="bg-preview-img" src="" alt="önizleme">
+        <div class="bg-preview-label">Önizleme — Uygula'ya bas</div>
+      </div>
+      <div class="bg-modal-actions">
+        <button class="btn-bg-cancel" onclick="closeBgModal()">İptal</button>
+        <button class="btn-bg-apply" id="btn-bg-apply" onclick="applyBg()" disabled>Uygula</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 const CAT={
@@ -557,8 +608,83 @@ document.getElementById('m-title').addEventListener('keydown',e=>{if(e.key==='En
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeConfirm();}});
 
 // ── INIT ───────────────────────────────────────────
+// ── BACKGROUND MANAGEMENT ──────────────────────────────────────────────────
+const BG_TABLE = 'app_settings';
+const BG_KEY_ROW = 'background_image';
+let pendingBgData = null;
+
+async function loadBg(){
+  try {
+    const res = await sbFetch(BG_TABLE + '?key=eq.' + BG_KEY_ROW + '&select=value&limit=1');
+    const data = await res.json();
+    if(Array.isArray(data) && data.length > 0 && data[0].value){
+      document.getElementById('bg-el').style.backgroundImage = "url('" + data[0].value + "')";
+    }
+  } catch(e){ /* no bg stored yet */ }
+}
+
+function openBgModal(){
+  pendingBgData = null;
+  document.getElementById('bg-preview').style.display = 'none';
+  document.getElementById('bg-file-input').value = '';
+  document.getElementById('btn-bg-apply').disabled = true;
+  document.getElementById('bg-backdrop').classList.add('open');
+}
+function closeBgModal(){ document.getElementById('bg-backdrop').classList.remove('open'); pendingBgData = null; }
+
+function onBgFileSelect(input){
+  if(!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  // Resize/compress to max ~800px wide for DB storage
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const maxW = 1400, maxH = 800;
+      let w = img.width, h = img.height;
+      if(w > maxW){ h = Math.round(h * maxW / w); w = maxW; }
+      if(h > maxH){ w = Math.round(w * maxH / h); h = maxH; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      pendingBgData = canvas.toDataURL('image/jpeg', 0.82);
+      document.getElementById('bg-preview-img').src = pendingBgData;
+      document.getElementById('bg-preview').style.display = 'block';
+      document.getElementById('btn-bg-apply').disabled = false;
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function applyBg(){
+  if(!pendingBgData) return;
+  const btn = document.getElementById('btn-bg-apply');
+  btn.disabled = true; btn.textContent = 'Kaydediliyor...';
+  try {
+    // Check if row exists
+    const check = await sbFetch(BG_TABLE + '?key=eq.' + BG_KEY_ROW + '&select=key&limit=1');
+    const exists = await check.json();
+    if(Array.isArray(exists) && exists.length > 0){
+      // Update existing — first delete old then insert (upsert)
+      await sbFetch(BG_TABLE + '?key=eq.' + BG_KEY_ROW, {method:'DELETE', prefer:'return=minimal'});
+    }
+    await sbFetch(BG_TABLE, {method:'POST', body: JSON.stringify({key: BG_KEY_ROW, value: pendingBgData}), prefer:'return=minimal'});
+    document.getElementById('bg-el').style.backgroundImage = "url('" + pendingBgData + "')";
+    closeBgModal();
+    showToast('🖼️ Arka plan güncellendi!');
+  } catch(e){
+    showToast('Hata: ' + e.message, true);
+  }
+  btn.disabled = false; btn.textContent = 'Uygula';
+}
+
+document.getElementById('bg-backdrop').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeBgModal(); });
+
+// ── INIT ───────────────────────────────────────────
 (function init(){
   document.getElementById('setup-screen').style.display='none';
+  loadBg();
   seedIfEmpty().then(fetchAll);
 })();
 </script>
