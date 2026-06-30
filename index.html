@@ -405,16 +405,29 @@ async function seedIfEmpty(){
   await sbFetch('activities', {method:'POST', body:JSON.stringify(defaults), prefer:'return=minimal'});
 }
 
-async function fetchAll(){
-  setLoading(true);
+const ACTS_CACHE_KEY = 'acts_cache_v1';
+
+function loadCachedActs(){
+  try{
+    const c = localStorage.getItem(ACTS_CACHE_KEY);
+    if(c){ acts = JSON.parse(c); render(); return true; }
+  }catch(e){}
+  return false;
+}
+function cacheActs(){
+  try{ localStorage.setItem(ACTS_CACHE_KEY, JSON.stringify(acts)); }catch(e){}
+}
+
+async function fetchAll(silent){
+  if(!silent) setLoading(acts.length===0);
   try {
     const res = await sbFetch('activities?select=*&order=sort_order.asc,id.asc');
     const data = await res.json();
     acts = data.map(r=>({...r, photos: Array.isArray(r.photos)?r.photos:[null,null,null]}));
-    // ensure photos array is always length 3
     acts.forEach(a=>{ while(a.photos.length<3) a.photos.push(null); });
+    cacheActs();
     render();
-  } catch(e){ showToast('Bağlantı hatası', true); }
+  } catch(e){ if(!silent) showToast('Bağlantı hatası', true); }
   setLoading(false);
 }
 
@@ -481,12 +494,13 @@ function render(){
       <div class="chevron"><i class="ti ti-chevron-down"></i></div>
     `;
 
-    row.querySelector('.cb').addEventListener('click', async e=>{
+    row.querySelector('.cb').addEventListener('click', e=>{
       e.stopPropagation();
       a.done=!a.done;
+      cacheActs();
       render();
-      await apiUpdate(a.id,{done:a.done});
       if(a.done) showToast('✅ Yapıldı!');
+      apiUpdate(a.id,{done:a.done}).catch(()=>showToast('Senkron hatası', true));
     });
     row.querySelector('.icon-btn.edit').addEventListener('click',e=>{e.stopPropagation();openEdit(a.id);});
     row.querySelector('.icon-btn.del').addEventListener('click',e=>{e.stopPropagation();openConfirm(a.id);});
@@ -518,20 +532,34 @@ function render(){
         slot.querySelector('input').addEventListener('change',function(){
           if(!this.files||!this.files[0])return;
           const r=new FileReader();
-          r.onload=async e=>{
-            a.photos[i]=e.target.result;
-            render(); openId=a.id;
-            await apiUpdate(a.id,{photos:a.photos});
-            showToast('📷 Fotoğraf kaydedildi!');
+          r.onload=e=>{
+            const img = new Image();
+            img.onload = () => {
+              // compress photo to max 600px wide before storing
+              const maxW = 700;
+              let w = img.width, h = img.height;
+              if(w > maxW){ h = Math.round(h * maxW / w); w = maxW; }
+              const canvas = document.createElement('canvas');
+              canvas.width = w; canvas.height = h;
+              canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+              const compressed = canvas.toDataURL('image/jpeg', 0.78);
+              a.photos[i]=compressed;
+              cacheActs();
+              render(); openId=a.id;
+              showToast('📷 Fotoğraf kaydedildi!');
+              apiUpdate(a.id,{photos:a.photos}).catch(()=>showToast('Senkron hatası', true));
+            };
+            img.src = e.target.result;
           };
           r.readAsDataURL(this.files[0]);
         });
       } else {
-        slot.querySelector('.del-photo').addEventListener('click',async e=>{
+        slot.querySelector('.del-photo').addEventListener('click',e=>{
           e.stopPropagation();
           a.photos[i]=null;
+          cacheActs();
           render(); openId=a.id;
-          await apiUpdate(a.id,{photos:a.photos});
+          apiUpdate(a.id,{photos:a.photos}).catch(()=>showToast('Senkron hatası', true));
         });
       }
     });
@@ -568,19 +596,28 @@ async function saveActivity(){
   const title=document.getElementById('m-title').value.trim();
   if(!title){ document.getElementById('m-title').focus(); return; }
   const cat=document.getElementById('m-cat').value;
-  setLoading(true);
+
   if(editId!==null){
-    await apiUpdate(editId,{title,cat});
     const a=acts.find(x=>x.id===editId);
     if(a){a.title=title;a.cat=cat;}
+    cacheActs(); render(); closeModal();
     showToast('✏️ Güncellendi!');
+    apiUpdate(editId,{title,cat}).catch(()=>showToast('Senkron hatası', true));
   } else {
+    const tempId = 'temp_' + Date.now();
     const maxOrder = acts.length ? Math.max(...acts.map(a=>a.sort_order||0)) : 0;
-    const newA = await apiInsert({title,cat,date:todayStr(),done:false,photos:[],sort_order:maxOrder+1});
-    if(newA){ newA.photos=[null,null,null]; acts.push(newA); }
+    const optimistic = {id:tempId,title,cat,date:todayStr(),done:false,photos:[null,null,null],sort_order:maxOrder+1};
+    acts.push(optimistic);
+    cacheActs(); render(); closeModal();
     showToast('✨ Eklendi!');
+    try{
+      const newA = await apiInsert({title,cat,date:todayStr(),done:false,photos:[],sort_order:maxOrder+1});
+      if(newA){
+        const idx = acts.findIndex(x=>x.id===tempId);
+        if(idx>-1){ newA.photos=[null,null,null]; acts[idx]=newA; cacheActs(); render(); }
+      }
+    }catch(e){ showToast('Senkron hatası', true); }
   }
-  render(); closeModal(); setLoading(false);
 }
 
 // ── DELETE ─────────────────────────────────────────
@@ -593,12 +630,13 @@ function openConfirm(id){
 function closeConfirm(){ document.getElementById('confirm-backdrop').classList.remove('open'); delId=null; }
 async function confirmDelete(){
   if(delId===null)return;
-  setLoading(true);
-  await apiDelete(delId);
-  acts=acts.filter(x=>x.id!==delId);
-  if(openId===delId)openId=null;
-  render(); closeConfirm(); setLoading(false);
+  const idToDelete = delId;
+  acts=acts.filter(x=>x.id!==idToDelete);
+  if(openId===idToDelete)openId=null;
+  cacheActs();
+  render(); closeConfirm();
   showToast('🗑️ Silindi.');
+  apiDelete(idToDelete).catch(()=>showToast('Senkron hatası', true));
 }
 
 // ── KEYBOARD ───────────────────────────────────────
@@ -699,7 +737,13 @@ document.getElementById('bg-backdrop').addEventListener('click', e=>{ if(e.targe
 (function init(){
   document.getElementById('setup-screen').style.display='none';
   loadBg();
-  seedIfEmpty().then(fetchAll);
+  const hadCache = loadCachedActs();
+  if(hadCache){
+    // instant render done — sync with DB silently in background
+    fetchAll(true);
+  } else {
+    seedIfEmpty().then(()=>fetchAll(false));
+  }
 })();
 </script>
 </body>
