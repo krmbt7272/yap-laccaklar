@@ -251,13 +251,11 @@ create policy "public access"
       <div class="field"><label>Kategori</label>
         <select id="m-cat">
           <option value="Doğa">🌿 Doğa</option>
+          <option value="Gezi">🚂 Gezi</option>
           <option value="Yemek">🍕 Yemek</option>
           <option value="Eğlence">🎉 Eğlence</option>
           <option value="Spor">🚴 Spor</option>
-          <option value="Sanat">🎨 Sanat</option>
-          <option value="Kültür">🎭 Kültür</option>
-          <option value="Müzik">🎵 Müzik</option>
-          <option value="Dinlenme">💆 Dinlenme</option>
+          <option value="Sanat&Müzik">🎨 Sanat&Müzik</option>
         </select>
       </div>
       <div class="modal-actions">
@@ -314,10 +312,8 @@ const CAT={
   'Yemek':   {bg:'#fff3e0',color:'#e65100'},
   'Eğlence': {bg:'#f3e5f5',color:'#6a1b9a'},
   'Spor':    {bg:'#e3f2fd',color:'#1565c0'},
-  'Sanat':   {bg:'#fce4ec',color:'#880e4f'},
-  'Kültür':  {bg:'#fffde7',color:'#b45f06'},
-  'Müzik':   {bg:'#e0f7fa',color:'#006064'},
-  'Dinlenme':{bg:'#f1f8e9',color:'#33691e'},
+  'Sanat&Müzik':   {bg:'#fce4ec',color:'#880e4f'},
+  'Gezi':  {bg:'#fffde7',color:'#b45f06'},
 };
 
 const CFG_KEY = 'sb_config_v1';
@@ -386,21 +382,6 @@ async function seedIfEmpty(){
   if(!Array.isArray(data) || data.length > 0) return;
   const today = todayStr();
   const defaults = [
-    {title:'🌅 Gün batımı izlemeye gitmek',cat:'Doğa',date:today,done:false,photos:[],sort_order:1},
-    {title:'🍕 Birlikte pizza yapmak',cat:'Yemek',date:today,done:false,photos:[],sort_order:2},
-    {title:'🎬 Film maratonu yapmak',cat:'Eğlence',date:today,done:false,photos:[],sort_order:3},
-    {title:'🚴 Bisiklet turuna çıkmak',cat:'Spor',date:today,done:false,photos:[],sort_order:4},
-    {title:'🏕️ Kamp kurmak',cat:'Doğa',date:today,done:false,photos:[],sort_order:5},
-    {title:'📸 Fotoğraf çekimi yapmak',cat:'Sanat',date:today,done:false,photos:[],sort_order:6},
-    {title:'🎭 Tiyatroya gitmek',cat:'Kültür',date:today,done:false,photos:[],sort_order:7},
-    {title:'🍦 Dondurma yemeye çıkmak',cat:'Yemek',date:today,done:false,photos:[],sort_order:8},
-    {title:'🎵 Konsere gitmek',cat:'Müzik',date:today,done:false,photos:[],sort_order:9},
-    {title:'🌊 Denize girmek',cat:'Doğa',date:today,done:false,photos:[],sort_order:10},
-    {title:'🎲 Oyun gecesi düzenlemek',cat:'Eğlence',date:today,done:false,photos:[],sort_order:11},
-    {title:'💆 Spa gününe gitmek',cat:'Dinlenme',date:today,done:false,photos:[],sort_order:12},
-    {title:'📚 Kitapçıya gitmek',cat:'Kültür',date:today,done:false,photos:[],sort_order:13},
-    {title:'🌸 Botanik bahçesini gezmek',cat:'Doğa',date:today,done:false,photos:[],sort_order:14},
-    {title:'🎨 Resim kursu almak',cat:'Sanat',date:today,done:false,photos:[],sort_order:15},
   ];
   await sbFetch('activities', {method:'POST', body:JSON.stringify(defaults), prefer:'return=minimal'});
 }
