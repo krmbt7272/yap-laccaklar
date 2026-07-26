@@ -454,7 +454,17 @@ function validDbId(id){
 }
 async function apiUpdate(id, patch){
   if(!validDbId(id)) throw new Error('Geçersiz etkinlik ID: ' + id);
-  await sbFetch('activities?id=eq.'+encodeURIComponent(id), {method:'PATCH', body:JSON.stringify(patch), prefer:'return=minimal'});
+  const numericId = Number(id);
+  const res = await sbFetch('activities?id=eq.' + numericId + '&select=id', {
+    method:'PATCH',
+    body:JSON.stringify(patch),
+    prefer:'return=representation'
+  });
+  const rows = await res.json();
+  if(!Array.isArray(rows) || rows.length === 0){
+    throw new Error('Kayıt Supabase üzerinde bulunamadı veya güncelleme izni yok. ID: ' + numericId);
+  }
+  return rows[0];
 }
 async function apiInsert(obj){
   const res = await sbFetch('activities', {method:'POST', body:JSON.stringify(obj)});
@@ -517,14 +527,25 @@ function render(){
       <div class="chevron"><i class="ti ti-chevron-down"></i></div>
     `;
 
-    row.querySelector('.cb').addEventListener('click', e=>{
+    row.querySelector('.cb').addEventListener('click', async e=>{
       e.stopPropagation();
       if(!validDbId(a.id)){ showToast('Bu kayıt yalnızca eski GitHub yedeğinde. Önce Supabase bağlantısını yenile.', true); return; }
-      a.done=!a.done;
-      cacheActs();
-      render();
-      if(a.done) showToast('✅ Yapıldı!');
-      apiUpdate(a.id,{done:a.done}).catch(()=>showToast('Senkron hatası', true));
+      const oldDone = !!a.done;
+      const newDone = !oldDone;
+      try{
+        await apiUpdate(a.id,{done:newDone});
+        a.done = newDone;
+        a._backup = false;
+        dataSource = 'supabase';
+        cacheActs();
+        render();
+        showToast(newDone ? '✅ Yapıldı ve Supabase’e kaydedildi!' : '↩️ Yapılmadı olarak kaydedildi');
+      }catch(err){
+        console.error('Supabase update error:', err);
+        a.done = oldDone;
+        render();
+        showToast('Senkron hatası: ' + err.message, true);
+      }
     });
     row.querySelector('.icon-btn.edit').addEventListener('click',e=>{e.stopPropagation();openEdit(a.id);});
     row.querySelector('.icon-btn.del').addEventListener('click',e=>{e.stopPropagation();openConfirm(a.id);});
@@ -571,7 +592,7 @@ function render(){
               cacheActs();
               render(); openId=a.id;
               showToast('📷 Fotoğraf kaydedildi!');
-              apiUpdate(a.id,{photos:a.photos}).catch(()=>showToast('Senkron hatası', true));
+              apiUpdate(a.id,{photos:a.photos}).catch(err=>{ console.error(err); showToast('Senkron hatası: '+err.message, true); fetchAll(true); });
             };
             img.src = e.target.result;
           };
@@ -583,7 +604,7 @@ function render(){
           a.photos[i]=null;
           cacheActs();
           render(); openId=a.id;
-          apiUpdate(a.id,{photos:a.photos}).catch(()=>showToast('Senkron hatası', true));
+          apiUpdate(a.id,{photos:a.photos}).catch(err=>{ console.error(err); showToast('Senkron hatası: '+err.message, true); fetchAll(true); });
         });
       }
     });
@@ -627,7 +648,7 @@ async function saveActivity(){
     if(a){a.title=title;a.cat=cat;}
     cacheActs(); render(); closeModal();
     showToast('✏️ Güncellendi!');
-    apiUpdate(editId,{title,cat}).catch(()=>showToast('Senkron hatası', true));
+    apiUpdate(editId,{title,cat}).catch(err=>{ console.error(err); showToast('Senkron hatası: '+err.message, true); fetchAll(true); });
   } else {
     const tempId = 'temp_' + Date.now();
     const maxOrder = acts.length ? Math.max(...acts.map(a=>a.sort_order||0)) : 0;
@@ -667,7 +688,7 @@ async function confirmDelete(){
   cacheActs();
   render(); closeConfirm();
   showToast('🗑️ Silindi.');
-  apiDelete(idToDelete).catch(()=>showToast('Senkron hatası', true));
+  apiDelete(idToDelete).catch(err=>{ console.error(err); showToast('Senkron hatası: '+err.message, true); fetchAll(true); });
 }
 
 // ── KEYBOARD ───────────────────────────────────────
