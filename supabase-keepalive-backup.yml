@@ -1,0 +1,54 @@
+name: Supabase Keep Alive and Backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Her gün Türkiye saatiyle yaklaşık 09:17 (UTC 06:17)
+    - cron: "17 6 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: supabase-daily-backup
+  cancel-in-progress: true
+
+jobs:
+  keep-alive-and-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repoyu indir
+        uses: actions/checkout@v4
+
+      - name: Supabase verilerini indir
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_ANON_KEY"
+          mkdir -p data
+          curl --fail --retry 3 --retry-delay 5             "$SUPABASE_URL/rest/v1/activities?select=*&order=sort_order.asc,id.asc"             -H "apikey: $SUPABASE_ANON_KEY"             -H "Authorization: Bearer $SUPABASE_ANON_KEY"             -H "Accept: application/json"             -o /tmp/activities.json
+          python - <<'PY2'
+          import json
+          from datetime import datetime, timezone
+          rows=json.load(open('/tmp/activities.json',encoding='utf-8'))
+          if not isinstance(rows,list):
+              raise SystemExit('Supabase cevabı liste değil')
+          payload={'generated_at':datetime.now(timezone.utc).isoformat(),'activities':rows}
+          with open('data/activities-backup.json','w',encoding='utf-8') as f:
+              json.dump(payload,f,ensure_ascii=False,indent=2)
+          PY2
+
+      - name: Yedek değiştiyse repoya kaydet
+        run: |
+          if git diff --quiet -- data/activities-backup.json; then
+            echo "Yeni veri yok."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/activities-backup.json
+          git commit -m "chore: Supabase günlük veri yedeği"
+          git push
