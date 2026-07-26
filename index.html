@@ -337,8 +337,8 @@ function showToast(msg, err=false){
 function setLoading(v){ document.getElementById('loading').classList.toggle('show', v); }
 
 // ── SUPABASE HELPERS ───────────────────────────────
-function sbFetch(path, opts={}){
-  return fetch(SB_URL + '/rest/v1/' + path, {
+async function sbFetch(path, opts={}){
+  const res = await fetch(SB_URL + '/rest/v1/' + path, {
     ...opts,
     headers:{
       'apikey': SB_KEY,
@@ -348,6 +348,12 @@ function sbFetch(path, opts={}){
       ...opts.headers
     }
   });
+  if(!res.ok){
+    let detail = '';
+    try { detail = await res.text(); } catch(e) {}
+    throw new Error('Supabase HTTP ' + res.status + (detail ? ' — ' + detail : ''));
+  }
+  return res;
 }
 
 async function connectSupabase(){
@@ -389,6 +395,7 @@ async function seedIfEmpty(){
 
 const ACTS_CACHE_KEY = 'acts_cache_v1';
 const REPO_BACKUP_URL = './data/activities-backup.json';
+let dataSource = 'cache';
 
 function loadCachedActs(){
   try{
@@ -408,8 +415,11 @@ async function loadRepositoryBackup(){
     const data = await res.json();
     const rows = Array.isArray(data) ? data : data.activities;
     if(!Array.isArray(rows)) return false;
-    acts = rows.map(r=>({...r, photos:Array.isArray(r.photos)?r.photos:[null,null,null]}));
+    const validRows = rows.filter(r => r && r.id !== null && r.id !== undefined && String(r.id) !== 'null');
+    if(!validRows.length && rows.length) return false;
+    acts = validRows.map(r=>({...r, photos:Array.isArray(r.photos)?r.photos:[null,null,null], _backup:true}));
     acts.forEach(a=>{ while(a.photos.length<3) a.photos.push(null); });
+    dataSource = 'backup';
     cacheActs();
     render();
     return true;
@@ -421,21 +431,30 @@ async function fetchAll(silent){
   try {
     const res = await sbFetch('activities?select=*&order=sort_order.asc,id.asc');
     const data = await res.json();
-    acts = data.map(r=>({...r, photos: Array.isArray(r.photos)?r.photos:[null,null,null]}));
+    if(!Array.isArray(data)) throw new Error('Supabase beklenmeyen cevap döndürdü');
+    acts = data.map(r=>({...r, photos: Array.isArray(r.photos)?r.photos:[null,null,null], _backup:false}));
     acts.forEach(a=>{ while(a.photos.length<3) a.photos.push(null); });
+    dataSource = 'supabase';
     cacheActs();
     render();
   } catch(e){
-    const backupLoaded = await loadRepositoryBackup();
+    console.error('Supabase sync error:', e);
+    // Yerel önbellek varsa, eski GitHub yedeğiyle üzerine yazma.
+    const hasLocal = acts.length > 0;
+    const backupLoaded = hasLocal ? false : await loadRepositoryBackup();
     if(!silent){
-      showToast(backupLoaded ? 'Supabase kapalı — GitHub yedeği açıldı' : 'Bağlantı hatası — cihaz önbelleği kullanılıyor', !backupLoaded);
+      showToast(backupLoaded ? 'Supabase erişilemiyor — GitHub yedeği açıldı' : 'Supabase erişilemiyor — cihazdaki son veriler korunuyor', true);
     }
   }
   setLoading(false);
 }
 
+function validDbId(id){
+  return id !== null && id !== undefined && String(id) !== 'null' && /^\d+$/.test(String(id));
+}
 async function apiUpdate(id, patch){
-  await sbFetch('activities?id=eq.'+id, {method:'PATCH', body:JSON.stringify(patch), prefer:'return=minimal'});
+  if(!validDbId(id)) throw new Error('Geçersiz etkinlik ID: ' + id);
+  await sbFetch('activities?id=eq.'+encodeURIComponent(id), {method:'PATCH', body:JSON.stringify(patch), prefer:'return=minimal'});
 }
 async function apiInsert(obj){
   const res = await sbFetch('activities', {method:'POST', body:JSON.stringify(obj)});
@@ -443,7 +462,8 @@ async function apiInsert(obj){
   return Array.isArray(data) ? data[0] : data;
 }
 async function apiDelete(id){
-  await sbFetch('activities?id=eq.'+id, {method:'DELETE', prefer:'return=minimal'});
+  if(!validDbId(id)) throw new Error('Geçersiz etkinlik ID: ' + id);
+  await sbFetch('activities?id=eq.'+encodeURIComponent(id), {method:'DELETE', prefer:'return=minimal'});
 }
 
 // ── UTILS ──────────────────────────────────────────
@@ -499,6 +519,7 @@ function render(){
 
     row.querySelector('.cb').addEventListener('click', e=>{
       e.stopPropagation();
+      if(!validDbId(a.id)){ showToast('Bu kayıt yalnızca eski GitHub yedeğinde. Önce Supabase bağlantısını yenile.', true); return; }
       a.done=!a.done;
       cacheActs();
       render();
@@ -585,6 +606,7 @@ function openModal(){
 }
 function openEdit(id){
   const a=acts.find(x=>x.id===id); if(!a)return;
+  if(!validDbId(a.id)){ showToast('Bu yedek kayıt düzenlenemez. Supabase bağlantısını yenile.', true); return; }
   editId=id;
   document.getElementById('modal-title').innerHTML='<i class="ti ti-pencil"></i> Düzenle';
   document.getElementById('modal-save-btn').textContent='Kaydet';
@@ -619,12 +641,18 @@ async function saveActivity(){
         const idx = acts.findIndex(x=>x.id===tempId);
         if(idx>-1){ newA.photos=[null,null,null]; acts[idx]=newA; cacheActs(); render(); }
       }
-    }catch(e){ showToast('Senkron hatası', true); }
+    }catch(e){
+      acts = acts.filter(x=>x.id!==tempId);
+      cacheActs(); render();
+      console.error(e);
+      showToast('Supabase kaydı başarısız; ekleme geri alındı.', true);
+    }
   }
 }
 
 // ── DELETE ─────────────────────────────────────────
 function openConfirm(id){
+  if(!validDbId(id)){ showToast('Bu yedek kayıt silinemez. Supabase bağlantısını yenile.', true); return; }
   delId=id;
   const a=acts.find(x=>x.id===id);
   document.getElementById('confirm-text').textContent=(a?'"'+a.title+'" ':'')+' silinecek. Bu işlem geri alınamaz.';
