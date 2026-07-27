@@ -177,8 +177,10 @@ function updateStats(){
 
 // ── RENDER ─────────────────────────────────────────
 function render(){
-  const list=document.getElementById('list');
-  list.innerHTML='';
+  const todoList = document.getElementById('todo-list');
+  const doneList = document.getElementById('done-list');
+  todoList.innerHTML = '';
+  doneList.innerHTML = '';
   acts.forEach((a,idx)=>{
     const cc=CAT[a.cat]||{bg:'#f5f5f5',color:'#555'};
     const isOpen=openId===a.id;
@@ -285,7 +287,11 @@ function render(){
     });
 
     wrap.appendChild(panel);
-    list.appendChild(wrap);
+    if (a.done) {
+      doneList.appendChild(wrap);
+    } else {
+      todoList.appendChild(wrap);
+    }
   });
   updateStats();
   initSortable();
