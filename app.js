@@ -11,7 +11,7 @@ const CAT={
 const CFG_KEY = 'sb_config_v1';
 let SB_URL = 'https://nnxqcvjbssiiwduzfqwv.supabase.co', SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ueHFjdmpic3NpaXdkdXpmcXd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2OTM0NTQsImV4cCI6MjA5ODI2OTQ1NH0.Iw_bY4yWSEXxCKDQCTmwvHwTd0nG_tg7pGg-V06mnzw';
 let acts = [], openId = null, editId = null, delId = null;
-let sortableInstance = null;
+let sortableInstances = [];
 
 // ── TOAST ──────────────────────────────────────────
 let toastTimer;
@@ -304,11 +304,15 @@ function render(){
 
 // ── DRAG & DROP SORTING ───────────────────────────
 function initSortable(){
-  const list=document.getElementById('list');
-  if(!list || typeof Sortable==='undefined') return;
-  if(sortableInstance) sortableInstance.destroy();
+  const todoList=document.getElementById('todo-list');
+  const doneList=document.getElementById('done-list');
+  if(!todoList || !doneList || typeof Sortable==='undefined') return;
 
-  sortableInstance=Sortable.create(list,{
+  sortableInstances.forEach(instance=>instance.destroy());
+  sortableInstances=[];
+
+  const createSortable=(list)=>Sortable.create(list,{
+    group:'activities',
     animation:180,
     handle:'.drag-handle',
     draggable:'.item-wrap',
@@ -323,20 +327,31 @@ function initSortable(){
       openId=null;
     },
 
-    async onEnd(){
+    async onEnd(evt){
       const previous=acts.map(a=>({...a,photos:[...a.photos]}));
-      const ids=[...list.querySelectorAll('.item-wrap')]
-        .map(el=>el.dataset.id);
+      const movedId=evt.item.dataset.id;
+      const movedActivity=acts.find(a=>String(a.id)===String(movedId));
+      if(!movedActivity) return;
 
-      const reordered=ids
+      // Sağ liste = tamamlandı, sol liste = yapılacak.
+      const newDone=evt.to.id==='done-list';
+      const doneChanged=movedActivity.done!==newDone;
+      movedActivity.done=newDone;
+
+      const todoIds=[...todoList.querySelectorAll('.item-wrap')]
+        .map(el=>el.dataset.id);
+      const doneIds=[...doneList.querySelectorAll('.item-wrap')]
+        .map(el=>el.dataset.id);
+      const orderedIds=[...todoIds,...doneIds];
+
+      acts=orderedIds
         .map(id=>acts.find(a=>String(a.id)===String(id)))
         .filter(Boolean);
 
-      reordered.forEach((a,index)=>{
+      acts.forEach((a,index)=>{
         a.sort_order=index+1;
       });
 
-      acts=reordered;
       cacheActs();
       render();
 
@@ -345,10 +360,13 @@ function initSortable(){
           acts
             .filter(a=>!String(a.id).startsWith('temp_'))
             .map((a,index)=>apiUpdate(a.id,{
-              sort_order:index+1
+              sort_order:index+1,
+              ...(String(a.id)===String(movedId)?{done:newDone}:{})
             }))
         );
-        showToast('↕️ Sıralama kaydedildi.');
+        showToast(doneChanged
+          ? (newDone?'✅ Yapılanlara taşındı.':'↩️ Yapılacaklara taşındı.')
+          : '↕️ Sıralama kaydedildi.');
       }catch(e){
         acts=previous;
         cacheActs();
@@ -357,6 +375,9 @@ function initSortable(){
       }
     }
   });
+
+  sortableInstances.push(createSortable(todoList));
+  sortableInstances.push(createSortable(doneList));
 }
 
 // ── MODAL ──────────────────────────────────────────
