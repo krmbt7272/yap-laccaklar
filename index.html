@@ -78,8 +78,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;m
 .cb.checked i{display:block}
 
 .row-body{flex:1;padding:14px 0 14px 2px;min-width:0}
-.row-title{font-size:14px;font-weight:600;color:#dc2626;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color 0.2s}
-.row.is-done .row-title{color:#15803d;text-decoration:none;font-weight:700}
+.row-title{font-size:14px;font-weight:600;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color 0.2s}
+.row.is-done .row-title{color:#aaa;text-decoration:line-through;font-weight:400}
 .row-meta{display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap}
 .cat-pill{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;letter-spacing:0.2px}
 .row-date{font-size:11px;color:#bbb;display:flex;align-items:center;gap:3px}
@@ -336,8 +336,8 @@ function showToast(msg, err=false){
 function setLoading(v){ document.getElementById('loading').classList.toggle('show', v); }
 
 // ── SUPABASE HELPERS ───────────────────────────────
-async function sbFetch(path, opts={}){
-  const res = await fetch(SB_URL + '/rest/v1/' + path, {
+function sbFetch(path, opts={}){
+  return fetch(SB_URL + '/rest/v1/' + path, {
     ...opts,
     headers:{
       'apikey': SB_KEY,
@@ -347,17 +347,6 @@ async function sbFetch(path, opts={}){
       ...opts.headers
     }
   });
-  if(!res.ok){
-    let detail = '';
-    try {
-      const err = await res.clone().json();
-      detail = err.message || err.details || err.hint || '';
-    } catch(e) {
-      try { detail = await res.clone().text(); } catch(_) {}
-    }
-    throw new Error('Supabase HTTP ' + res.status + (detail ? ': ' + detail : ''));
-  }
-  return res;
 }
 
 async function connectSupabase(){
