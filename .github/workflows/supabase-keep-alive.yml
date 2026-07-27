@@ -1,0 +1,31 @@
+name: Supabase Keep Alive
+
+on:
+  schedule:
+    # Her gün Türkiye saatiyle yaklaşık 09:00
+    # GitHub Actions cron UTC kullanır.
+    - cron: "0 6 * * *"
+
+  # İstersen Actions ekranından elle de çalıştırabilirsin.
+  workflow_dispatch:
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping Supabase
+        run: |
+          response=$(curl --silent --show-error \
+            --write-out "%{http_code}" \
+            --output response.json \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/activities?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+
+          echo "HTTP status: $response"
+          cat response.json
+
+          if [ "$response" -lt 200 ] || [ "$response" -ge 300 ]; then
+            exit 1
+          fi
