@@ -185,3 +185,46 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;m
   box-shadow:0 12px 32px rgba(0,0,0,.25)
 }
 .sortable-drag{opacity:.95}
+.boards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.board {
+  min-width: 0;
+}
+
+.board-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  padding: 0 4px;
+}
+
+.board-title span {
+  margin-left: auto;
+  min-width: 25px;
+  height: 25px;
+  border-radius: 20px;
+  background: rgba(255,255,255,.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.done-board .board-title {
+  color: #86efac;
+}
+
+@media (max-width: 800px) {
+  .boards {
+    grid-template-columns: 1fr;
+  }
+}
