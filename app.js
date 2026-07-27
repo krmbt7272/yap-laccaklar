@@ -295,6 +295,11 @@ function render(){
   });
   updateStats();
   initSortable();
+  document.getElementById('todo-count').textContent =
+  acts.filter(a => !a.done).length;
+
+  document.getElementById('done-count').textContent =
+  acts.filter(a => a.done).length;
 }
 
 // ── DRAG & DROP SORTING ───────────────────────────
